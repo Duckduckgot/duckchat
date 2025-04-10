@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mohanavel15/duckchat"
+	"github.com/Duckduckgot/duckchat"
 )
 
 func main() {
