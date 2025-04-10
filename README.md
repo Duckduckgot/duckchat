@@ -14,7 +14,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/mohanavel15/duckchat"
+	"github.com/Duckduckgot/duckchat"
 )
 
 func main() {
