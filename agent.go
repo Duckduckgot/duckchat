@@ -49,68 +49,63 @@ func (a *Agent) GetVqd() error {
 }
 
 func (a *Agent) MakeRequest() (string, error) {
-    if a.vqd == "" {
-        err := a.GetVqd()
-        if err != nil {
-            return "", err
-        }
-    }
+	if a.vqd == "" {
+		err := a.GetVqd()
+		if err != nil {
+			return "", err
+		}
+	}
 
-    buf, err := a.chat.Json()
-    if err != nil {
-        return "", err
-    }
+	buf, err := a.chat.Json()
+	if err != nil {
+		return "", err
+	}
 
-    r, err := http.NewRequest("POST", ENDPOINT_CHAT, bytes.NewBuffer(buf))
-    if err != nil {
-        return "", err
-    }
+	r, err := http.NewRequest("POST", ENDPOINT_CHAT, bytes.NewBuffer(buf))
+	if err != nil {
+		return "", err
+	}
 
-    r.Header.Add("Content-Type", "application/json")
-    r.Header.Add("x-vqd-4", a.vqd)
-    r.Header.Add("User-Agent", USER_AGENT)
+	r.Header.Add("Content-Type", "application/json")
+	r.Header.Add("x-vqd-4", a.vqd)
+	r.Header.Add("User-Agent", USER_AGENT)
 
-    client := &http.Client{}
-    resp, err := client.Do(r)
-    if err != nil {
-        return "", err
-    }
-    defer resp.Body.Close()
+	client := &http.Client{}
+	resp, err := client.Do(r)
+	if err != nil {
+		return "", err
+	}
 
-    if resp.StatusCode != http.StatusOK {
-        return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-    }
+	a.vqd = resp.Header.Get("x-vqd-4")
+	defer resp.Body.Close()
 
-    a.vqd = resp.Header.Get("x-vqd-4")
+	ai_message := ""
 
-    ai_message := ""
-    reader := bufio.NewReader(resp.Body)
+	reader := bufio.NewReader(resp.Body)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil || line == "[DONE]" {
+			if ai_message == "" {
+				return "", err
+			}
+			break
+		}
 
-    for {
-        line, err := reader.ReadString('\n')
-        if err != nil {
-            if err == io.EOF {
-                break
-            }
-            return "", fmt.Errorf("error reading response: %v", err)
-        }
+		line, _ = strings.CutSuffix(line, "\n")
+		line, _ = strings.CutPrefix(line, "data: ")
+		if line == "" {
+			continue
+		}
 
-        line, _ = strings.CutSuffix(line, "\n")
-        line, _ = strings.CutPrefix(line, "data: ")
-        if line == "" {
-            continue
-        }
+		var res map[string]string
+		json.Unmarshal([]byte(line), &res)
 
-        var res map[string]string
-        json.Unmarshal([]byte(line), &res)
+		if text, ok := res["message"]; ok {
+			ai_message += text
+		}
+	}
 
-        if text, ok := res["message"]; ok {
-            ai_message += text
-        }
-    }
+	a.chat.AddMessage(NewMessage("assistant", ai_message))
 
-    a.chat.AddMessage(NewMessage("assistant", ai_message))
-
-    return ai_message, nil
+	return ai_message, nil
 }
-
