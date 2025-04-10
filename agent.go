@@ -49,63 +49,68 @@ func (a *Agent) GetVqd() error {
 }
 
 func (a *Agent) MakeRequest() (string, error) {
-	if a.vqd == "" {
-		err := a.GetVqd()
-		if err != nil {
-			return "", err
-		}
-	}
+    if a.vqd == "" {
+        err := a.GetVqd()
+        if err != nil {
+            return "", err
+        }
+    }
 
-	buf, err := a.chat.Json()
-	if err != nil {
-		return "", err
-	}
+    buf, err := a.chat.Json()
+    if err != nil {
+        return "", err
+    }
 
-	r, err := http.NewRequest("POST", ENDPOINT_CHAT, bytes.NewBuffer(buf))
-	if err != nil {
-		return "", err
-	}
+    r, err := http.NewRequest("POST", ENDPOINT_CHAT, bytes.NewBuffer(buf))
+    if err != nil {
+        return "", err
+    }
 
-	r.Header.Add("Content-Type", "application/json")
-	r.Header.Add("x-vqd-4", a.vqd)
-	r.Header.Add("User-Agent", USER_AGENT)
+    r.Header.Add("Content-Type", "application/json")
+    r.Header.Add("x-vqd-4", a.vqd)
+    r.Header.Add("User-Agent", USER_AGENT)
 
-	client := &http.Client{}
-	resp, err := client.Do(r)
-	if err != nil {
-		return "", err
-	}
+    client := &http.Client{}
+    resp, err := client.Do(r)
+    if err != nil {
+        return "", err
+    }
+    defer resp.Body.Close()
 
-	a.vqd = resp.Header.Get("x-vqd-4")
-	defer resp.Body.Close()
+    if resp.StatusCode != http.StatusOK {
+        return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+    }
 
-	ai_message := ""
+    a.vqd = resp.Header.Get("x-vqd-4")
 
-	reader := bufio.NewReader(resp.Body)
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil || line == "[DONE]" {
-			if ai_message == "" {
-				return "", err
-			}
-			break
-		}
+    ai_message := ""
+    reader := bufio.NewReader(resp.Body)
 
-		line, _ = strings.CutSuffix(line, "\n")
-		line, _ = strings.CutPrefix(line, "data: ")
-		if line == "" {
-			continue
-		}
+    for {
+        line, err := reader.ReadString('\n')
+        if err != nil {
+            if err == io.EOF {
+                break
+            }
+            return "", fmt.Errorf("error reading response: %v", err)
+        }
 
-		var res map[string]string
-		json.Unmarshal([]byte(line), &res)
+        line, _ = strings.CutSuffix(line, "\n")
+        line, _ = strings.CutPrefix(line, "data: ")
+        if line == "" {
+            continue
+        }
 
-		if text, ok := res["message"]; ok {
-			ai_message += text
-		}
-	}
+        var res map[string]string
+        json.Unmarshal([]byte(line), &res)
 
-	a.chat.AddMessage(NewMessage("assistant", ai_message))
+        if text, ok := res["message"]; ok {
+            ai_message += text
+        }
+    }
 
-	return ai_message, nil
+    a.chat.AddMessage(NewMessage("assistant", ai_message))
+
+    return ai_message, nil
 }
+
